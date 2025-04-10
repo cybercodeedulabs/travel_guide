@@ -66,39 +66,54 @@ async function getHotelSuggestions(city, checkInDate, nights) {
     const accessToken = await getAccessToken();
     if (!accessToken) return 'Error retrieving hotel data.';
 
-    const searchURL = `https://test.api.amadeus.com/v2/shopping/hotel-offers?cityCode=${city}&checkInDate=${checkInDate}&roomQuantity=1&adults=2&paymentPolicy=NONE&includeClosed=false&bestRateOnly=true&view=FULL&sort=PRICE`;
-
-    const hotelRes = await fetch(searchURL, {
-      headers: { Authorization: `Bearer ${accessToken}` }
+    const response = await fetch('/api/hotelSearch', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        cityCode: city,
+        checkInDate,
+        nights,
+        accessToken
+      })
     });
-    const hotelData = await hotelRes.json();
 
-    return hotelData.data.slice(0, 3).map(h => {
-      return `${h.hotel.name} - ${h.offers[0].price.total} ${h.offers[0].price.currency}`;
+    const data = await response.json();
+
+    if (!data.data || data.data.length === 0) {
+      return 'No hotels found.';
+    }
+
+    return data.data.slice(0, 3).map(h => {
+      const offer = h.offers[0];
+      const price = offer?.price?.total || 'N/A';
+      const currency = offer?.price?.currency || '';
+      return `${h.hotel.name} - ${price} ${currency}`;
     }).join('<br>');
+
   } catch (error) {
     console.error('Hotel API error:', error);
     return 'Unable to fetch hotel suggestions at the moment.';
   }
 }
 
+
 async function getTravelOptions(source, destination, date) {
   try {
     const accessToken = await getAccessToken();
     if (!accessToken) return 'Error retrieving travel data.';
 
-    const offersURL = `https://test.api.amadeus.com/v2/shopping/flight-offers?originLocationCode=${source}&destinationLocationCode=${destination}&departureDate=${date}&adults=1&nonStop=false&max=3`;
-
-    const offersResponse = await fetch(offersURL, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`
-      }
+    const response = await fetch('/api/flightSearch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ origin: source, destination, date, accessToken })
     });
 
-    const offersData = await offersResponse.json();
+    const result = await response.json();
 
-    if (offersData.data && offersData.data.length > 0) {
-      return offersData.data.map((offer, i) => {
+    if (result.data && result.data.length > 0) {
+      return result.data.map((offer, i) => {
         const itinerary = offer.itineraries[0];
         const segments = itinerary.segments;
         const duration = itinerary.duration.replace('PT', '').toLowerCase();
@@ -114,6 +129,7 @@ async function getTravelOptions(source, destination, date) {
     return 'Error fetching travel options.';
   }
 }
+
 
 function displayResults(source, destination, budget, currency, convertedBudget, travelOptions, hotelSuggestions) {
   const resultsDiv = document.getElementById('output');
