@@ -5,8 +5,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function handleFormSubmit(event) {
   event.preventDefault();
+  
+   const sourceEl = document.getElementById('source');
+  if (!sourceEl) {
+    console.error("Source input not found in DOM");
+    return;
+  }
 
-  const source = document.getElementById('source').value;
+  const source = sourceEl.value;
+  console.log(sourceEl); // optional: logs the element if you want to check
+
   const destination = document.getElementById('destination').value;
   const budget = parseFloat(document.getElementById('budget').value);
   const currency = document.getElementById('currency').value;
