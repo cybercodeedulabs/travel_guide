@@ -89,7 +89,7 @@ async function getHotelSuggestions(cityCode, checkInDate, nights) {
     const accessToken = await getAccessToken();
     if (!accessToken) return 'Error retrieving hotel data.';
 
-    const response = await fetch('/.netlify/functions/hotelSearch', {
+    const response = await fetch('https://cybercodeedulabs-pocket-travel-guide.netlify.app/.netlify/functions/hotelSearch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cityCode, checkInDate, nights, accessToken })
