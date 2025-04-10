@@ -1,6 +1,10 @@
 document.addEventListener('DOMContentLoaded', () => {
   const form = document.getElementById('travelForm');
+  if (form){
   form.addEventListener('submit', handleFormSubmit);
+  } else {
+    console.error("Form with ID 'travelForm' not found.");
+  }
 });
 
 async function handleFormSubmit(event) {
