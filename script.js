@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
   const form = document.getElementById('travelForm');
-  if (form){
-  form.addEventListener('submit', handleFormSubmit);
+  if (form) {
+    form.addEventListener('submit', handleFormSubmit);
   } else {
     console.error("Form with ID 'travelForm' not found.");
   }
@@ -9,17 +9,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function handleFormSubmit(event) {
   event.preventDefault();
-  
-   const sourceEl = document.getElementById('source');
+
+  const sourceEl = document.getElementById('source');
   if (!sourceEl) {
     console.error("Source input not found in DOM");
     return;
   }
 
-  const source = sourceEl.value;
-  console.log(sourceEl); // optional: logs the element if you want to check
-
-  const destination = document.getElementById('destination').value;
+  const source = sourceEl.value.trim();
+  const destination = document.getElementById('destination').value.trim();
   const budget = parseFloat(document.getElementById('budget').value);
   const currency = document.getElementById('currency').value;
   const startDate = document.getElementById('start-date').value;
@@ -30,11 +28,36 @@ async function handleFormSubmit(event) {
     return;
   }
 
+  const sourceCode = await getCityCode(source);
+  const destinationCode = await getCityCode(destination);
+
+  if (!sourceCode || !destinationCode) {
+    alert('Could not resolve one or both city names to valid IATA codes. Please use known cities.');
+    return;
+  }
+
   const convertedBudget = await convertCurrency(budget, currency, 'USD');
-  const travelOptions = await getTravelOptions(source, destination, startDate);
-  const hotelSuggestions = await getHotelSuggestions(destination, startDate, nights);
+  const travelOptions = await getTravelOptions(sourceCode, destinationCode, startDate);
+  const hotelSuggestions = await getHotelSuggestions(destinationCode, startDate, nights);
 
   displayResults(source, destination, budget, currency, convertedBudget, travelOptions, hotelSuggestions);
+}
+
+async function getCityCode(cityName) {
+  try {
+    const accessToken = await getAccessToken();
+    if (!accessToken) return null;
+
+    const response = await fetch(`https://test.api.amadeus.com/v1/reference-data/locations?keyword=${encodeURIComponent(cityName)}&subType=CITY`, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+
+    const data = await response.json();
+    return data?.data?.[0]?.iataCode || null;
+  } catch (error) {
+    console.error('City code fetch error:', error);
+    return null;
+  }
 }
 
 async function convertCurrency(amount, from, to) {
@@ -61,22 +84,15 @@ async function getAccessToken() {
   }
 }
 
-async function getHotelSuggestions(city, checkInDate, nights) {
+async function getHotelSuggestions(cityCode, checkInDate, nights) {
   try {
     const accessToken = await getAccessToken();
     if (!accessToken) return 'Error retrieving hotel data.';
 
     const response = await fetch('/api/hotelSearch', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        cityCode: city,
-        checkInDate,
-        nights,
-        accessToken
-      })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cityCode, checkInDate, nights, accessToken })
     });
 
     const data = await response.json();
@@ -86,7 +102,7 @@ async function getHotelSuggestions(city, checkInDate, nights) {
     }
 
     return data.data.slice(0, 3).map(h => {
-      const offer = h.offers[0];
+      const offer = h.offers?.[0];
       const price = offer?.price?.total || 'N/A';
       const currency = offer?.price?.currency || '';
       return `${h.hotel.name} - ${price} ${currency}`;
@@ -98,8 +114,7 @@ async function getHotelSuggestions(city, checkInDate, nights) {
   }
 }
 
-
-async function getTravelOptions(source, destination, date) {
+async function getTravelOptions(origin, destination, date) {
   try {
     const accessToken = await getAccessToken();
     if (!accessToken) return 'Error retrieving travel data.';
@@ -107,7 +122,7 @@ async function getTravelOptions(source, destination, date) {
     const response = await fetch('/api/flightSearch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ origin: source, destination, date, accessToken })
+      body: JSON.stringify({ origin, destination, date, accessToken })
     });
 
     const result = await response.json();
@@ -117,7 +132,9 @@ async function getTravelOptions(source, destination, date) {
         const itinerary = offer.itineraries[0];
         const segments = itinerary.segments;
         const duration = itinerary.duration.replace('PT', '').toLowerCase();
-        const segmentInfo = segments.map(seg => `${seg.departure.iataCode} → ${seg.arrival.iataCode} (${seg.carrierCode})`).join(', ');
+        const segmentInfo = segments.map(seg =>
+          `${seg.departure.iataCode} → ${seg.arrival.iataCode} (${seg.carrierCode})`
+        ).join(', ');
         return `Option ${i + 1}: ${segmentInfo}, Duration: ${duration}`;
       }).join('<br><br>');
     } else {
@@ -129,7 +146,6 @@ async function getTravelOptions(source, destination, date) {
     return 'Error fetching travel options.';
   }
 }
-
 
 function displayResults(source, destination, budget, currency, convertedBudget, travelOptions, hotelSuggestions) {
   const resultsDiv = document.getElementById('output');
