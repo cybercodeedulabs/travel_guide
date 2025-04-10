@@ -7,69 +7,55 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-const API_ROUTES = {
-  CITY_CODE: 'https://test.api.amadeus.com/v1/reference-data/locations',
-  CURRENCY_CONVERT: 'https://api.frankfurter.app/latest',
-  FLIGHT_SEARCH: '/api/flightSearch',
-  HOTEL_SEARCH: '/api/hotelSearch',
-};
-
 async function handleFormSubmit(event) {
   event.preventDefault();
 
-  const source = document.getElementById('source')?.value.trim();
-  const destination = document.getElementById('destination')?.value.trim();
-  const budget = parseFloat(document.getElementById('budget')?.value);
-  const currency = document.getElementById('currency')?.value;
-  const startDate = document.getElementById('start-date')?.value;
-  const nights = parseInt(document.getElementById('nights')?.value);
+  const sourceEl = document.getElementById('source');
+  if (!sourceEl) {
+    console.error("Source input not found in DOM");
+    return;
+  }
+
+  const source = sourceEl.value.trim();
+  const destination = document.getElementById('destination').value.trim();
+  const budget = parseFloat(document.getElementById('budget').value);
+  const currency = document.getElementById('currency').value;
+  const startDate = document.getElementById('start-date').value;
+  const nights = parseInt(document.getElementById('nights').value);
 
   if (!source || !destination || isNaN(budget) || !currency || !startDate || isNaN(nights)) {
     alert('Please fill in all fields correctly.');
     return;
   }
 
-  setLoadingState(true);
+  const sourceCode = await getCityCode(source);
+  const destinationCode = await getCityCode(destination);
 
-  try {
-    const sourceCode = await getCityCode(source);
-    const destinationCode = await getCityCode(destination);
-
-    if (!sourceCode || !destinationCode) {
-      alert('Could not resolve one or both city names to valid IATA codes. Please use known cities.');
-      return;
-    }
-
-    const convertedBudget = await convertCurrency(budget, currency, 'USD');
-    const travelOptions = await getTravelOptions(sourceCode, destinationCode, startDate);
-    const hotelSuggestions = await getHotelSuggestions(destinationCode, startDate, nights);
-
-    displayResults(source, destination, budget, currency, convertedBudget, travelOptions, hotelSuggestions);
-  } catch (error) {
-    console.error('Error processing travel form:', error);
-    alert('Something went wrong. Please try again later.');
-  } finally {
-    setLoadingState(false);
+  if (!sourceCode || !destinationCode) {
+    alert('Could not resolve one or both city names to valid IATA codes. Please use known cities.');
+    return;
   }
+
+  const convertedBudget = await convertCurrency(budget, currency, 'USD');
+  const travelOptions = await getTravelOptions(sourceCode, destinationCode, startDate);
+  const hotelSuggestions = await getHotelSuggestions(destinationCode, startDate, nights);
+
+  displayResults(source, destination, budget, currency, convertedBudget, travelOptions, hotelSuggestions);
 }
 
 async function getCityCode(cityName) {
-  const url = `${API_ROUTES.CITY_CODE}?keyword=${encodeURIComponent(cityName)}&subType=CITY`;
-
   try {
     const accessToken = await getAccessToken();
-    if (!accessToken) throw new Error('Access token retrieval failed.');
+    if (!accessToken) return null;
 
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+    const response = await fetch(`https://test.api.amadeus.com/v1/reference-data/locations?keyword=${encodeURIComponent(cityName)}&subType=CITY`, {
+      headers: { Authorization: `Bearer ${accessToken}` }
     });
-
-    if (!response.ok) throw new Error(`City code API returned status: ${response.status}`);
 
     const data = await response.json();
     return data?.data?.[0]?.iataCode || null;
   } catch (error) {
-    console.error(`City code fetch error for "${cityName}":`, error);
+    console.error('City code fetch error:', error);
     return null;
   }
 }
@@ -77,13 +63,10 @@ async function getCityCode(cityName) {
 async function convertCurrency(amount, from, to) {
   if (from === to) return amount;
 
-  const url = `${API_ROUTES.CURRENCY_CONVERT}?amount=${amount}&from=${from}&to=${to}`;
   try {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`Currency conversion API returned status: ${response.status}`);
-
+    const response = await fetch(`https://api.frankfurter.app/latest?amount=${amount}&from=${from}&to=${to}`);
     const data = await response.json();
-    return data?.rates?.[to] || amount;
+    return data.rates[to];
   } catch (error) {
     console.error('Currency conversion error:', error);
     return amount;
@@ -93,8 +76,6 @@ async function convertCurrency(amount, from, to) {
 async function getAccessToken() {
   try {
     const response = await fetch('/.netlify/functions/amadeusToken');
-    if (!response.ok) throw new Error(`Access token API returned status: ${response.status}`);
-
     const data = await response.json();
     return data.access_token;
   } catch (error) {
@@ -108,13 +89,11 @@ async function getHotelSuggestions(cityCode, checkInDate, nights) {
     const accessToken = await getAccessToken();
     if (!accessToken) return 'Error retrieving hotel data.';
 
-    const response = await fetch(API_ROUTES.HOTEL_SEARCH, {
+    const response = await fetch('/api/hotelSearch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cityCode, checkInDate, nights, accessToken }),
+      body: JSON.stringify({ cityCode, checkInDate, nights, accessToken })
     });
-
-    if (!response.ok) throw new Error(`Hotel API returned status: ${response.status}`);
 
     const data = await response.json();
 
@@ -128,6 +107,7 @@ async function getHotelSuggestions(cityCode, checkInDate, nights) {
       const currency = offer?.price?.currency || '';
       return `${h.hotel.name} - ${price} ${currency}`;
     }).join('<br>');
+
   } catch (error) {
     console.error('Hotel API error:', error);
     return 'Unable to fetch hotel suggestions at the moment.';
@@ -139,13 +119,11 @@ async function getTravelOptions(origin, destination, date) {
     const accessToken = await getAccessToken();
     if (!accessToken) return 'Error retrieving travel data.';
 
-    const response = await fetch(API_ROUTES.FLIGHT_SEARCH, {
+    const response = await fetch('/api/flightSearch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ origin, destination, date, accessToken }),
+      body: JSON.stringify({ origin, destination, date, accessToken })
     });
-
-    if (!response.ok) throw new Error(`Travel options API returned status: ${response.status}`);
 
     const result = await response.json();
 
@@ -162,6 +140,7 @@ async function getTravelOptions(origin, destination, date) {
     } else {
       return 'No travel options found for the selected route and date.';
     }
+
   } catch (error) {
     console.error('Error fetching travel options:', error);
     return 'Error fetching travel options.';
@@ -177,9 +156,4 @@ function displayResults(source, destination, budget, currency, convertedBudget, 
     <p><strong>Travel Options:</strong><br>${travelOptions}</p>
     <p><strong>Hotel Suggestions:</strong><br>${hotelSuggestions}</p>
   `;
-}
-
-function setLoadingState(isLoading) {
-  const resultsDiv = document.getElementById('output');
-  resultsDiv.innerHTML = isLoading ? '<p>Loading...</p>' : '';
 }
