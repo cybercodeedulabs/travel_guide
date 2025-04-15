@@ -10,6 +10,10 @@ document.addEventListener('DOMContentLoaded', () => {
 async function handleFormSubmit(event) {
   event.preventDefault();
 
+  // Show loading indicator or message here (optional)
+  const outputDiv = document.getElementById('output');
+  outputDiv.innerHTML = '<p>Processing your request...</p>';
+
   const sourceEl = document.getElementById('source');
   if (!sourceEl) {
     console.error("Source input not found in DOM");
@@ -33,6 +37,7 @@ async function handleFormSubmit(event) {
 
   if (!sourceCode || !destinationCode) {
     alert('Could not resolve one or both city names to valid IATA codes. Please use known cities.');
+    outputDiv.innerHTML = '<p>Error: Could not find valid city codes. Please try different cities.</p>';
     return;
   }
 
@@ -48,8 +53,10 @@ async function getCityCode(cityName) {
     const accessToken = await getAccessToken();
     if (!accessToken) return null;
 
-    const response = await fetch(`https://test.api.amadeus.com/v1/reference-data/locations?keyword=${encodeURIComponent(cityName)}&subType=CITY`, {
-      headers: { Authorization: `Bearer ${accessToken}` }
+    const response = await fetch('/api/cityLookup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cityName, accessToken })
     });
 
     const data = await response.json();
@@ -75,7 +82,7 @@ async function convertCurrency(amount, from, to) {
 
 async function getAccessToken() {
   try {
-    const response = await fetch('/.netlify/functions/amadeusToken');
+    const response = await fetch('/api/amadeusToken');
     const data = await response.json();
     return data.access_token;
   } catch (error) {
